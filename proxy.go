@@ -4,8 +4,8 @@ package main
 
 import (
 	"bytes"
+	"github.com/sirupsen/logrus"
 	"io"
-	"log"
 	"net"
 	"net/url"
 	"strconv"
@@ -13,22 +13,21 @@ import (
 )
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	l, err := net.Listen("tcp", ":8097")
 	if err != nil {
-		log.Panic(err)
+		logrus.Errorf("listen-error: %v", err)
 	}
 	defer func(l net.Listener) {
 		err := l.Close()
 		if err != nil {
-			log.Panic(err)
+			logrus.Errorf("close-error: %v", err)
 		}
 	}(l)
 
 	for {
 		client, err := l.Accept()
 		if err != nil {
-			log.Panic(err)
+			logrus.Errorf("accept-error: %v", err)
 		}
 		go handleClientRequest(client)
 	}
@@ -41,14 +40,14 @@ func handleClientRequest(client net.Conn) {
 	defer func(client net.Conn) {
 		err := client.Close()
 		if err != nil {
-			log.Panic(err)
+			logrus.Errorf("close-error: %v", err)
 		}
 	}(client)
 
 	var b [1024]byte
 	n, err := client.Read(b[:])
 	if err != nil {
-		log.Println(err)
+		logrus.Errorf("read-error: %v", err)
 		return
 	}
 
@@ -69,10 +68,10 @@ func handleClientRequest(client net.Conn) {
 
 	hostPortURL, err := url.Parse(host)
 	if err != nil {
-		log.Println(err)
+		logrus.Errorf("parse-error: %v", err)
 		return
 	}
-	log.Println(hostPortURL.Scheme + "|" + hostPortURL.Opaque)
+	logrus.Infof("%v|%v", hostPortURL.Scheme, hostPortURL.Opaque)
 
 	if len(hostPortURL.Opaque) > 0 { // 如果是带证书请求
 		address = hostPortURL.Scheme + ":" + hostPortURL.Opaque
@@ -87,18 +86,18 @@ func handleClientRequest(client net.Conn) {
 	// 获得了请求的host和port，就开始拨号吧
 	server, err := net.Dial("tcp", address)
 	if err != nil {
-		log.Println(err)
+		logrus.Errorf("dial-error: %v", err)
 		return
 	}
 	if method == "CONNECT" {
 		_, err := client.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 		if err != nil {
-			log.Println(err)
+			logrus.Errorf("write-error-1: %v", err)
 		}
 	} else {
 		_, err := server.Write(b[:n])
 		if err != nil {
-			log.Println(err)
+			logrus.Errorf("write-error-2: %v", err)
 		}
 	}
 
@@ -106,11 +105,11 @@ func handleClientRequest(client net.Conn) {
 	go func() {
 		_, err := io.Copy(server, client)
 		if err != nil {
-			log.Println(err)
+			logrus.Errorf("copy-error-1: %v", err)
 		}
 	}()
 	_, err = io.Copy(client, server)
 	if err != nil {
-		log.Println(err)
+		logrus.Errorf("copy-error-2: %v", err)
 	}
 }
