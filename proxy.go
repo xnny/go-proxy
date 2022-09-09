@@ -18,7 +18,12 @@ func main() {
 	if err != nil {
 		log.Panic(err)
 	}
-	defer l.Close()
+	defer func(l net.Listener) {
+		err := l.Close()
+		if err != nil {
+			log.Panic(err)
+		}
+	}(l)
 
 	for {
 		client, err := l.Accept()
@@ -33,7 +38,12 @@ func handleClientRequest(client net.Conn) {
 	if client == nil {
 		return
 	}
-	defer client.Close()
+	defer func(client net.Conn) {
+		err := client.Close()
+		if err != nil {
+			log.Panic(err)
+		}
+	}(client)
 
 	var b [1024]byte
 	n, err := client.Read(b[:])
@@ -64,7 +74,7 @@ func handleClientRequest(client net.Conn) {
 	}
 	log.Println(hostPortURL.Scheme + "|" + hostPortURL.Opaque)
 
-	if len(hostPortURL.Opaque) > 0 {		// 如果是带证书请求
+	if len(hostPortURL.Opaque) > 0 { // 如果是带证书请求
 		address = hostPortURL.Scheme + ":" + hostPortURL.Opaque
 	} else {
 		if strings.Index(hostPortURL.Host, ":") == -1 { // 简单的 http 请求
@@ -81,12 +91,26 @@ func handleClientRequest(client net.Conn) {
 		return
 	}
 	if method == "CONNECT" {
-		client.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+		_, err := client.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+		if err != nil {
+			log.Println(err)
+		}
 	} else {
-		server.Write(b[:n])
+		_, err := server.Write(b[:n])
+		if err != nil {
+			log.Println(err)
+		}
 	}
 
 	//进行转发
-	go io.Copy(server, client)
-	io.Copy(client, server)
+	go func() {
+		_, err := io.Copy(server, client)
+		if err != nil {
+			log.Println(err)
+		}
+	}()
+	_, err = io.Copy(client, server)
+	if err != nil {
+		log.Println(err)
+	}
 }
